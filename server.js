@@ -2,31 +2,32 @@ const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
 const port=process.env.PORT||3000;
 const system="You are Roamwise, an expert US road trip planner. Ask nuanced state-specific questions; discover real small towns and distinct experiences, not generic museums. Prefer one home-base town with practical day trips. Never invent opening hours, prices, or verified driving times. Avoid repeat attractions and honor rejected places. Return valid JSON only.";
 async function ai(task,data){
-  const key=process.env.GROQ_API_KEY;
-  if(!key)throw Error('GroqCloud is not configured yet. Add GROQ_API_KEY to Render Environment.');
+  const key=process.env.GEMINI_API_KEY;
+  if(!key)throw Error('Gemini is not configured yet. Add GEMINI_API_KEY in Render Environment.');
+  const model=process.env.GEMINI_MODEL||'gemini-2.5-flash-lite';
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),45000);
+  const timer=setTimeout(()=>controller.abort(),60000);
   let r;
   try{
-    r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
       method:'POST',
-      headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+      headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:process.env.GROQ_MODEL||'openai/gpt-oss-120b',
-        response_format:{type:'json_object'},
-        messages:[{role:'system',content:system},{role:'user',content:task+'\\n'+JSON.stringify(data)}]
+        systemInstruction:{parts:[{text:system}]},
+        contents:[{role:'user',parts:[{text:task+'\\n'+JSON.stringify(data)}]}],
+        generationConfig:{responseMimeType:'application/json'}
       }),
       signal:controller.signal
     });
-  }catch(e){throw Error(e.name==='AbortError'?'GroqCloud request timed out':'GroqCloud connection failed')}
+  }catch(e){throw Error(e.name==='AbortError'?'Gemini request timed out':'Gemini connection failed')}
   finally{clearTimeout(timer)}
-  if(r.status===429)throw Error('GroqCloud free-tier rate limit reached. Please try again later.');
-  if(r.status===401||r.status===403)throw Error('GroqCloud API key is invalid or unauthorized.');
-  if(!r.ok)throw Error('GroqCloud request failed (HTTP '+r.status+').');
+  if(r.status===429)throw Error('Gemini free-tier rate limit reached. Try again later.');
+  if(r.status===401||r.status===403)throw Error('Gemini API key is invalid or access is restricted.');
+  if(!r.ok)throw Error('Gemini request failed (HTTP '+r.status+').');
   const payload=await r.json();
-  const content=payload.choices?.[0]?.message?.content;
-  if(!content)throw Error('GroqCloud returned no itinerary content.');
-  try{return JSON.parse(content)}catch{throw Error('GroqCloud returned invalid JSON. Please retry.')}
+  const content=payload.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string').map(p=>p.text).join('');
+  if(!content)throw Error('Gemini returned no itinerary content.');
+  try{return JSON.parse(content)}catch{throw Error('Gemini returned invalid JSON. Please retry.')}
 }
 async function geocode(town,state){const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(town+', '+state+', USA'),{headers:{'User-Agent':'RoamwiseDevelopment/0.1'}});const d=await r.json();return d[0]?{lat:+d[0].lat,lon:+d[0].lon}:null}
 async function drive(a,b){const r=await fetch('https://router.project-osrm.org/route/v1/driving/'+a.lon+','+a.lat+';'+b.lon+','+b.lat+'?overview=false');const d=await r.json();return d.routes?.[0]?Math.ceil(d.routes[0].duration/60):null}
