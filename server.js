@@ -28,7 +28,7 @@ async function ai(task,data){
     }
     break;
   }
-  if(r.status===429){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'').slice(0,600)}catch{}throw Error('Gemini quota restriction (HTTP 429). '+(detail||'Check project/model quota in Google AI Studio.'))}
+  if(r.status===429){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'')}catch{}const daily=/per day|daily|RPD/i.test(detail);const match=detail.match(/retry in ([0-9hms.]+)/i);throw Error(daily?'Gemini daily free-tier quota is exhausted.'+(match?' Google suggests retrying in '+match[1]+'.':' Please try again after the daily reset.'):'Gemini is rate-limiting requests.'+(match?' Retry in '+match[1]+'.':' Please wait and try again.'))}
   if(r.status===401||r.status===403)throw Error('Gemini API key is invalid or access is restricted.');
   if(!r.ok){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'').slice(0,350)}catch{}throw Error('Gemini request failed after retries (HTTP '+r.status+'). '+detail)}
   const payload=await r.json();
