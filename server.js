@@ -4,7 +4,7 @@ const system="You are Roamwise, an expert US road trip planner. Ask nuanced stat
 async function ai(task,data){
   const key=process.env.GEMINI_API_KEY;
   if(!key)throw Error('Gemini is not configured yet. Add GEMINI_API_KEY in Render Environment.');
-  const model=process.env.GEMINI_MODEL||'gemini-2.5-flash';
+  const model=process.env.GEMINI_MODEL||'gemini-3.8-flash';
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),60000);
   let r;
