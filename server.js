@@ -5,25 +5,32 @@ async function ai(task,data){
   const key=process.env.GEMINI_API_KEY;
   if(!key)throw Error('Gemini is not configured yet. Add GEMINI_API_KEY in Render Environment.');
   const model=process.env.GEMINI_MODEL||'gemini-3.8-flash';
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),60000);
+  const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent';
+  const requestBody=JSON.stringify({
+    systemInstruction:{parts:[{text:system}]},
+    contents:[{role:'user',parts:[{text:task+'\\n'+JSON.stringify(data)}]}],
+    generationConfig:{responseMimeType:'application/json'}
+  });
   let r;
-  try{
-    r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
-      method:'POST',
-      headers:{'x-goog-api-key':key,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        systemInstruction:{parts:[{text:system}]},
-        contents:[{role:'user',parts:[{text:task+'\\n'+JSON.stringify(data)}]}],
-        generationConfig:{responseMimeType:'application/json'}
-      }),
-      signal:controller.signal
-    });
-  }catch(e){throw Error(e.name==='AbortError'?'Gemini request timed out':'Gemini connection failed')}
-  finally{clearTimeout(timer)}
+  for(let attempt=0;attempt<3;attempt++){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),30000);
+    try{
+      r=await fetch(url,{method:'POST',headers:{'x-goog-api-key':key,'Content-Type':'application/json'},body:requestBody,signal:controller.signal});
+    }catch(e){
+      if(attempt<2){await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));continue}
+      throw Error(e.name==='AbortError'?'Gemini timed out after retries':'Gemini connection failed after retries');
+    }finally{clearTimeout(timer)}
+    if(r.status===503&&attempt<2){
+      await r.body?.cancel().catch(()=>{});
+      await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));
+      continue;
+    }
+    break;
+  }
   if(r.status===429)throw Error('Gemini free-tier rate limit reached. Try again later.');
   if(r.status===401||r.status===403)throw Error('Gemini API key is invalid or access is restricted.');
-  if(!r.ok){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'').slice(0,350)}catch{}throw Error('Gemini request failed (HTTP '+r.status+'). '+detail)}
+  if(!r.ok){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'').slice(0,350)}catch{}throw Error('Gemini request failed after retries (HTTP '+r.status+'). '+detail)}
   const payload=await r.json();
   const content=payload.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string').map(p=>p.text).join('');
   if(!content)throw Error('Gemini returned no itinerary content.');
