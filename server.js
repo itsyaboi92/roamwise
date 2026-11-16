@@ -12,18 +12,18 @@ async function ai(task,data){
     generationConfig:{responseMimeType:'application/json'}
   });
   let r;
-  for(let attempt=0;attempt<3;attempt++){
+  for(let attempt=0;attempt<2;attempt++){
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),30000);
+    const timer=setTimeout(()=>controller.abort(),15000);
     try{
       r=await fetch(url,{method:'POST',headers:{'x-goog-api-key':key,'Content-Type':'application/json'},body:requestBody,signal:controller.signal});
     }catch(e){
-      if(attempt<2){await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));continue}
+      if(attempt<1){await new Promise(resolve=>setTimeout(resolve,900));continue}
       throw Error(e.name==='AbortError'?'Gemini timed out after retries':'Gemini connection failed after retries');
     }finally{clearTimeout(timer)}
-    if(r.status===503&&attempt<2){
+    if(r.status===503&&attempt<1){
       await r.body?.cancel().catch(()=>{});
-      await new Promise(resolve=>setTimeout(resolve,1200*(attempt+1)));
+      await new Promise(resolve=>setTimeout(resolve,900));
       continue;
     }
     break;
