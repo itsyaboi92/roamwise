@@ -4,7 +4,7 @@ const system="You are Roamwise, an expert US road trip planner. Ask nuanced stat
 async function ai(task,data){
   const key=process.env.GEMINI_API_KEY;
   if(!key)throw Error('Gemini is not configured yet. Add GEMINI_API_KEY in Render Environment.');
-  const model=process.env.GEMINI_MODEL||'gemini-2.5-flash-lite';
+  const model=process.env.GEMINI_MODEL||'gemini-2.5-flash';
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),60000);
   let r;
@@ -23,7 +23,7 @@ async function ai(task,data){
   finally{clearTimeout(timer)}
   if(r.status===429)throw Error('Gemini free-tier rate limit reached. Try again later.');
   if(r.status===401||r.status===403)throw Error('Gemini API key is invalid or access is restricted.');
-  if(!r.ok)throw Error('Gemini request failed (HTTP '+r.status+').');
+  if(!r.ok){let detail='';try{const failure=await r.json();detail=String(failure.error?.message||'').slice(0,350)}catch{}throw Error('Gemini request failed (HTTP '+r.status+'). '+detail)}
   const payload=await r.json();
   const content=payload.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string').map(p=>p.text).join('');
   if(!content)throw Error('Gemini returned no itinerary content.');
